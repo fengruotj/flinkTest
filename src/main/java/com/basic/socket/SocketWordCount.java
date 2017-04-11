@@ -13,7 +13,6 @@ import org.apache.flink.util.Collector;
  * Created by 79875 on 2017/4/9.
  * 单词统计数据源为 Socket数据源
  * flink run -c com.basic.socket.SocketWordCount flinkTest-1.0-SNAPSHOT.jar --hostname root2 --port 9999 --envParallelism 8 --outputfile hdfs://root2:9000/user/root/flinkwordcount/output/wordcounresult.txt
-
  */
 public class SocketWordCount {
     // *************************************************************************
@@ -27,8 +26,8 @@ public class SocketWordCount {
         final String hostname;
         final int envParallelism;
         final String outputfile;
+        final ParameterTool params = ParameterTool.fromArgs(args);
         try {
-            final ParameterTool params = ParameterTool.fromArgs(args);
             port = params.getInt("port");
             hostname=params.get("hostname");
             envParallelism=params.getInt("envParallelism");
@@ -66,9 +65,12 @@ public class SocketWordCount {
                     }
                 }).setParallelism(envParallelism);
 
-        // print the results with a single thread, rather than in parallel
-        windowCounts.writeAsText(outputfile).setParallelism(envParallelism);
-        //windowCounts.print().setParallelism(1);
+        if (params.has("outputfile")) {
+            windowCounts.writeAsText(params.get("output")).setParallelism(envParallelism);
+        } else {
+            System.out.println("Printing result to stdout. Use --output to specify output path.");
+            windowCounts.print();
+        }
         env.execute("Socket WordCount");
     }
 
