@@ -44,6 +44,9 @@ public class SocketWordCount {
         // get the execution environment
         final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
+        // set default parallelism for all operators (recommended value: number of available worker CPU cores in the cluster (hosts * cores))
+        env.setParallelism(envParallelism);
+
         // get input data by connecting to the socket
         DataStream<String> text = env.socketTextStream(hostname, port, "\n");
 
@@ -56,20 +59,20 @@ public class SocketWordCount {
                             out.collect(new WordWithCount(word, 1L));
                         }
                     }
-                }).setParallelism(envParallelism)
+                })
                 .keyBy("word")
                 .reduce(new ReduceFunction<WordWithCount>() {
                     @Override
                     public WordWithCount reduce(WordWithCount a, WordWithCount b) {
                         return new WordWithCount(a.word, a.count + b.count);
                     }
-                }).setParallelism(envParallelism);
+                });
 
         if (params.has("outputfile")) {
             windowCounts.writeAsText(params.get("output")).setParallelism(envParallelism);
         } else {
             System.out.println("Printing result to stdout. Use --output to specify output path.");
-            windowCounts.print();
+            //windowCounts.print();
         }
         env.execute("Socket WordCount");
     }

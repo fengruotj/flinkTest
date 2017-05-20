@@ -17,7 +17,9 @@
 
 package com.basic.file;
 
+import com.basic.model.WordWithCount;
 import org.apache.flink.api.common.functions.FlatMapFunction;
+import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.examples.java.wordcount.util.WordCountData;
@@ -68,6 +70,9 @@ public class WordCount {
 
 		envParallelism=params.getInt("envParallelism");
 
+		// set default parallelism for all operators (recommended value: number of available worker CPU cores in the cluster (hosts * cores))
+		env.setParallelism(envParallelism);
+
 		// get input data
 		DataStream<String> text;
 		if (params.has("input")) {
@@ -79,19 +84,32 @@ public class WordCount {
 			// get default test text data
 			text = env.fromElements(WordCountData.WORDS);
 		}
-		DataStream<Tuple2<String, Integer>> counts =
+
+		DataStream<WordWithCount> counts =
 		// split up the lines in pairs (2-tuples) containing: (word,1)
-		text.flatMap(new Tokenizer()).setParallelism(envParallelism)
+		text.flatMap(new FlatMapFunction<String, WordWithCount>() {
+            @Override
+            public void flatMap(String value, Collector<WordWithCount> out) {
+                for (String word : value.split(" ")) {
+                    out.collect(new WordWithCount(word, 1L));
+                }
+            }
+        })
 		// group by the tuple field "0" and sum up tuple field "1"
-				.keyBy(0).sum(1)
-				.setParallelism(envParallelism);
+				.keyBy("word")
+                .reduce(new ReduceFunction<WordWithCount>() {
+                    @Override
+                    public WordWithCount reduce(WordWithCount a, WordWithCount b) {
+                        return new WordWithCount(a.word, a.count + b.count);
+                    }
+                });
 
 		// emit result
 		if (params.has("output")) {
-			counts.writeAsText(params.get("output")).setParallelism(envParallelism);
+			counts.writeAsText(params.get("output"));
 		} else {
 			System.out.println("Printing result to stdout. Use --output to specify output path.");
-			counts.print();
+			//counts.print();
 		}
 
 		// execute program
@@ -125,5 +143,4 @@ public class WordCount {
 			}
 		}
 	}
-
 }

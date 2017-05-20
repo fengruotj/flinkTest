@@ -27,7 +27,6 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer08;
 import org.apache.flink.streaming.util.serialization.SimpleStringSchema;
 import org.apache.flink.util.Collector;
-
 import java.util.Properties;
 
 
@@ -52,6 +51,10 @@ public class KafkaWordCount {
 		}
 		envParallelism=parameterTool.getInt("envParallelism");
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		// set default parallelism for all operators (recommended value: number of available worker CPU cores in the cluster (hosts * cores))
+		env.setParallelism(envParallelism);
+
 		env.getConfig().disableSysoutLogging();
 		env.getConfig().setRestartStrategy(RestartStrategies.fixedDelayRestart(4, 10000));
 		env.enableCheckpointing(5000); // create a checkpoint every 5 seconds
@@ -69,7 +72,7 @@ public class KafkaWordCount {
 				.addSource(new FlinkKafkaConsumer08<>(
 						parameterTool.getRequired("topic"),
 						new SimpleStringSchema(),
-						properties));
+						properties)).setParallelism(18);//KafKa 默认为18个分区
 
 		// parse the data, group it, window it, and aggregate the counts
 		DataStream<WordWithCount> windowCounts = messageStream
@@ -80,20 +83,20 @@ public class KafkaWordCount {
 							out.collect(new WordWithCount(word, 1L));
 						}
 					}
-				}).setParallelism(envParallelism)
+				})
 				.keyBy("word")
 				.reduce(new ReduceFunction<WordWithCount>() {
 					@Override
 					public WordWithCount reduce(WordWithCount a, WordWithCount b) {
 						return new WordWithCount(a.word, a.count + b.count);
 					}
-				}).setParallelism(envParallelism);
+				});
 
 		if (parameterTool.has("output")) {
 			windowCounts.writeAsText(parameterTool.get("output")).setParallelism(envParallelism);
 		} else {
 			System.out.println("Printing result to stdout. Use --output to specify output path.");
-			windowCounts.print();
+			//windowCounts.print();
 		}
 
 		env.execute("Read from Kafka WordCount");
